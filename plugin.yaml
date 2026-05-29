@@ -1,0 +1,18 @@
+name: hermes-token-usage
+version: 1.1.0
+description: >-
+  Hermes dashboard UI plugin — model-by-model token usage stats, estimated vs
+  actual cost breakdown, and live provider balance checks (DeepSeek, OpenRouter).
+  Adds a "Token Usage" tab to the Hermes web dashboard.
+author: DongHoon5793
+kind: standalone
+platforms:
+  - linux
+  - macos
+  - windows
+tags:
+  - dashboard
+  - analytics
+  - tokens
+  - cost
+  - monitoring

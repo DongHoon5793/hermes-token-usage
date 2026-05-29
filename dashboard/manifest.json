@@ -1,0 +1,14 @@
+{
+  "name": "token-usage",
+  "label": "Token Usage",
+  "description": "Model-by-model token usage dashboard — tokens, cost (estimated vs actual), session counts, and provider balances.",
+  "icon": "BarChart3",
+  "version": "1.1.0",
+  "tab": {
+    "path": "/token-usage",
+    "position": "after:models"
+  },
+  "slots": [],
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
+}
