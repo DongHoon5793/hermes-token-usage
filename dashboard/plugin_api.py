@@ -2,7 +2,7 @@
 
 Mounted at /api/plugins/token-usage/ by the dashboard plugin system.
 Provides:
-  - /models?days=N          — per-model token usage (enriched)
+  - /models?days=N          — per-model token usage (enriched, with realistic cost)
   - /balance                — provider account balance checks
 """
 
@@ -13,6 +13,105 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Query
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Realistic pricing table (per 1M tokens, USD, as of mid-2026)
+# Key: (provider, model_prefix) — first match wins when iterating
+# ---------------------------------------------------------------------------
+
+PRICING_TABLE: List[Dict[str, Any]] = [
+    # DeepSeek
+    {"provider": "deepseek", "prefix": "deepseek-reasoner",
+     "input": 0.55, "output": 2.19, "cache": 0.14},
+    {"provider": "deepseek", "prefix": "deepseek-v4",
+     "input": 0.27, "output": 1.10, "cache": 0.07},
+    {"provider": "deepseek", "prefix": "deepseek-chat",
+     "input": 0.27, "output": 1.10, "cache": 0.07},
+    {"provider": "deepseek", "prefix": "deepseek-v3",
+     "input": 0.27, "output": 1.10, "cache": 0.07},
+    {"provider": "deepseek", "prefix": "deepseek",
+     "input": 0.27, "output": 1.10, "cache": 0.07},
+
+    # OpenAI
+    {"provider": "openai", "prefix": "gpt-4o-mini",
+     "input": 0.15, "output": 0.60, "cache": 0.075},
+    {"provider": "openai", "prefix": "gpt-4o",
+     "input": 2.50, "output": 10.00, "cache": 1.25},
+    {"provider": "openai", "prefix": "gpt-4",
+     "input": 3.00, "output": 15.00, "cache": 1.50},
+    {"provider": "openai", "prefix": "o3-mini",
+     "input": 0.55, "output": 2.20, "cache": 0.275},
+    {"provider": "openai", "prefix": "o1",
+     "input": 5.00, "output": 40.00, "cache": 2.50},
+
+    # Anthropic
+    {"provider": "anthropic", "prefix": "claude-sonnet-4",
+     "input": 3.00, "output": 15.00, "cache": 1.50},
+    {"provider": "anthropic", "prefix": "claude-opus-4",
+     "input": 15.00, "output": 75.00, "cache": 7.50},
+    {"provider": "anthropic", "prefix": "claude-haiku-4",
+     "input": 0.80, "output": 4.00, "cache": 0.40},
+    {"provider": "anthropic", "prefix": "claude",
+     "input": 3.00, "output": 15.00, "cache": 1.50},
+
+    # Google
+    {"provider": "google", "prefix": "gemini-2.5-pro",
+     "input": 1.25, "output": 10.00, "cache": 0.625},
+    {"provider": "google", "prefix": "gemini-2.0-flash",
+     "input": 0.10, "output": 0.40, "cache": 0.025},
+    {"provider": "google", "prefix": "gemini",
+     "input": 0.10, "output": 0.40, "cache": 0.025},
+
+    # OpenRouter (generic fallback)
+    {"provider": "openrouter", "prefix": "",
+     "input": 2.00, "output": 8.00, "cache": 1.00},
+
+    # xAI / Grok
+    {"provider": "xai", "prefix": "grok",
+     "input": 2.00, "output": 8.00, "cache": 1.00},
+
+    # Custom / local — free
+    {"provider": "custom", "prefix": "",
+     "input": 0.0, "output": 0.0, "cache": 0.0},
+]
+
+
+def _get_pricing(provider: str, model: str) -> Dict[str, float]:
+    """Look up pricing for a model. Returns {input, output, cache} in USD per 1M tokens.
+    Falls back to custom-free for unknown providers or local models."""
+    provider_lower = (provider or "").lower()
+    model_lower = (model or "").lower()
+
+    # "custom" providers are local/free
+    if provider_lower in ("custom", "local", "ollama", "llama-cpp", "vllm", ""):
+        return {"input": 0.0, "output": 0.0, "cache": 0.0}
+
+    for entry in PRICING_TABLE:
+        if entry["provider"] == provider_lower:
+            if not entry["prefix"] or model_lower.startswith(entry["prefix"]):
+                return {
+                    "input": entry["input"],
+                    "output": entry["output"],
+                    "cache": entry["cache"],
+                }
+
+    # Unknown provider — use generic estimated cost from DB only
+    return {"input": 0.0, "output": 0.0, "cache": 0.0}
+
+
+def _compute_plugin_cost(
+    input_tok: int, output_tok: int, cache_tok: int, pricing: Dict[str, float]
+) -> float:
+    """Compute cost from token counts and pricing. Returns USD.
+    
+    By default, only input and output tokens are priced. Cache tokens
+    are informational (many providers do automatic prompt caching that
+    is already reflected in the input token count)."""
+    cost = 0.0
+    cost += (input_tok / 1_000_000) * pricing["input"]
+    cost += (output_tok / 1_000_000) * pricing["output"]
+    return round(cost, 6)
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +229,7 @@ def _check_openrouter_balance(api_key: str) -> Dict[str, Any]:
 
 @router.get("/models")
 async def get_model_usage(days: int = Query(default=30, ge=1, le=365)):
-    """Return per-model token usage enriched with actual vs estimated cost."""
+    """Return per-model token usage enriched with accurate cost estimation."""
     from hermes_state import SessionDB
 
     db = SessionDB()
@@ -160,17 +259,26 @@ async def get_model_usage(days: int = Query(default=30, ge=1, le=365)):
         )
         rows = [dict(r) for r in cur.fetchall()]
 
-        total_input = sum(r["input_tokens"] or 0 for r in rows)
-        total_output = sum(r["output_tokens"] or 0 for r in rows)
-        total_est_cost = sum(r["estimated_cost"] or 0 for r in rows)
-        total_act_cost = sum(r["actual_cost"] or 0 for r in rows)
-
+        # ---- build model list with enriched data ----
         models = []
         for row in rows:
+            provider = row.get("billing_provider") or ""
+            model_name = row["model"]
+
+            # Skip ghost entries (zero tokens, no provider)
             input_tok = row["input_tokens"] or 0
             output_tok = row["output_tokens"] or 0
+            cache_tok = row["cache_read_tokens"] or 0
+            if input_tok == 0 and output_tok == 0 and provider == "":
+                continue
+
             est = row["estimated_cost"] or 0
             act = row["actual_cost"] or 0
+
+            # Compute realistic cost from pricing table
+            pricing = _get_pricing(provider, model_name)
+            plugin_cost = _compute_plugin_cost(input_tok, output_tok, cache_tok, pricing)
+            has_plugin_cost = any(v > 0 for v in pricing.values())
 
             # Capability metadata
             caps = {}
@@ -178,8 +286,8 @@ async def get_model_usage(days: int = Query(default=30, ge=1, le=365)):
                 from agent.models_dev import get_model_capabilities
 
                 mc = get_model_capabilities(
-                    provider=row.get("billing_provider") or "",
-                    model=row["model"],
+                    provider=provider,
+                    model=model_name,
                 )
                 if mc is not None:
                     caps = {
@@ -195,15 +303,23 @@ async def get_model_usage(days: int = Query(default=30, ge=1, le=365)):
 
             models.append(
                 {
-                    "model": row["model"],
-                    "provider": row.get("billing_provider") or "",
+                    "model": model_name,
+                    "provider": provider,
                     "input_tokens": input_tok,
                     "output_tokens": output_tok,
-                    "cache_read_tokens": row["cache_read_tokens"] or 0,
+                    "total_tokens": input_tok + output_tok,
+                    "cache_read_tokens": cache_tok,
                     "reasoning_tokens": row["reasoning_tokens"] or 0,
+                    # DB-stored cost (Hermes internal estimate)
                     "estimated_cost": round(est, 6),
                     "actual_cost": round(act, 6),
                     "has_actual_cost": act > 0,
+                    # Plugin-computed cost from realistic pricing
+                    "plugin_cost": plugin_cost,
+                    "has_plugin_cost": has_plugin_cost,
+                    # Pricing used for transparency
+                    "pricing_input": pricing["input"],
+                    "pricing_output": pricing["output"],
                     "sessions": row["sessions"],
                     "api_calls": row["api_calls"] or 0,
                     "tool_calls": row["tool_calls"] or 0,
@@ -212,16 +328,33 @@ async def get_model_usage(days: int = Query(default=30, ge=1, le=365)):
                         row["avg_tokens_per_session"] or 0, 1
                     ),
                     "capabilities": caps,
-                    "input_pct": round(input_tok / total_input * 100, 1)
-                    if total_input
-                    else 0,
-                    "output_pct": round(output_tok / total_output * 100, 1)
-                    if total_output
-                    else 0,
-                    "cost_pct": round(est / total_est_cost * 100, 1)
-                    if total_est_cost
-                    else 0,
                 }
+            )
+
+        # ---- compute totals ----
+        total_input = sum(r["input_tokens"] for r in models)
+        total_output = sum(r["output_tokens"] for r in models)
+        total_est_cost = sum(r["estimated_cost"] for r in models)
+        total_act_cost = sum(r["actual_cost"] for r in models)
+        total_plugin_cost = sum(r["plugin_cost"] for r in models)
+
+        # ---- add percentage shares ----
+        for m in models:
+            m["input_pct"] = (
+                round(m["input_tokens"] / total_input * 100, 1) if total_input else 0
+            )
+            m["output_pct"] = (
+                round(m["output_tokens"] / total_output * 100, 1) if total_output else 0
+            )
+            m["total_pct"] = (
+                round(
+                    (m["total_tokens"]) / (total_input + total_output) * 100, 1
+                )
+                if (total_input + total_output) else 0
+            )
+            m["cost_pct"] = (
+                round(m["plugin_cost"] / total_plugin_cost * 100, 1)
+                if total_plugin_cost else 0
             )
 
         return {
@@ -230,17 +363,17 @@ async def get_model_usage(days: int = Query(default=30, ge=1, le=365)):
                 "total_input": total_input,
                 "total_output": total_output,
                 "total_tokens": total_input + total_output,
-                "total_cache_read": sum(
-                    r["cache_read_tokens"] or 0 for r in rows
-                ),
-                "total_reasoning": sum(
-                    r["reasoning_tokens"] or 0 for r in rows
-                ),
+                "total_cache_read": sum(r["cache_read_tokens"] for r in models),
+                "total_reasoning": sum(r["reasoning_tokens"] for r in models),
+                # DB-stored costs
                 "total_estimated_cost": round(total_est_cost, 6),
                 "total_actual_cost": round(total_act_cost, 6),
                 "has_actual_cost": total_act_cost > 0,
-                "total_sessions": sum(r["sessions"] for r in rows),
-                "total_api_calls": sum(r["api_calls"] or 0 for r in rows),
+                # Plugin-computed costs
+                "total_plugin_cost": round(total_plugin_cost, 6),
+                "has_plugin_cost": total_plugin_cost > 0,
+                "total_sessions": sum(r["sessions"] for r in models),
+                "total_api_calls": sum(r["api_calls"] for r in models),
                 "distinct_models": len(models),
             },
             "period_days": days,
@@ -283,6 +416,6 @@ async def get_balances():
         "reachable": reachable,
         "total_checked": len(checks),
         "note": "Balance shown is from provider APIs (actual). "
-        "Cost in /models endpoint is Hermes-estimated from token counts "
-        "unless actual_cost > 0 (from provider response headers).",
+        "Cost in /models endpoint uses realistic pricing tables "
+        "(unless actual_cost > 0 from provider response headers).",
     }

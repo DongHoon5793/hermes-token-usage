@@ -199,10 +199,11 @@
       fontSize: 13,
     };
 
-    var costDisplay = m.has_actual_cost
-      ? fmtCostShort(m.actual_cost)
-      : fmtCostShort(m.estimated_cost);
-    var costLabel = m.has_actual_cost ? "" : "~";
+    // Use plugin_cost as primary display; fall back to estimated_cost
+    var hasPluginCost = m.has_plugin_cost !== false;
+    var primaryCost = hasPluginCost ? (m.plugin_cost || 0) : (m.estimated_cost || 0);
+    var costLabel = hasPluginCost ? "" : "~";
+    var costColor = m.has_actual_cost ? "#4ade80" : hasPluginCost ? "#b0b0b0" : "#999";
 
     return React.createElement(
       "div",
@@ -223,9 +224,10 @@
         ),
         React.createElement("div", { style: { flex: 1, textAlign: "right", color: "#b0b0b0", paddingRight: 8 } }, fmt(m.input_tokens)),
         React.createElement("div", { style: { flex: 1, textAlign: "right", color: "#b0b0b0", paddingRight: 8 } }, fmt(m.output_tokens)),
-        React.createElement("div", { style: { flex: 0.8, textAlign: "right", color: "#999", paddingRight: 8 } }, fmt(m.cache_read_tokens)),
-        React.createElement("div", { style: { flex: 0.8, textAlign: "right", paddingRight: 8, color: m.has_actual_cost ? "#4ade80" : "#b0b0b0", fontWeight: m.has_actual_cost ? 600 : 400 } },
-          costLabel + costDisplay
+        React.createElement("div", { style: { flex: 1, textAlign: "right", color: "#e0e0e0", fontWeight: 600, paddingRight: 8 } }, fmt(m.total_tokens)),
+        React.createElement("div", { style: { flex: 0.6, textAlign: "right", color: "#999", paddingRight: 8 } }, fmt(m.cache_read_tokens)),
+        React.createElement("div", { style: { flex: 0.7, textAlign: "right", paddingRight: 8, color: costColor, fontWeight: m.has_actual_cost ? 600 : 400 } },
+          costLabel + fmtCostShort(primaryCost)
         ),
         React.createElement("div", { style: { flex: 0.5, textAlign: "right", color: "#999" } }, fmt(m.sessions)),
         React.createElement("div", { style: { width: 20, textAlign: "center", color: "#666" } }, isOpen ? "\u25BE" : "\u25B8")
@@ -234,7 +236,7 @@
       React.createElement("div", {
         style: {
           height: 2,
-          width: (m.input_pct || 0) + "%",
+          width: (m.total_pct || 0) + "%",
           backgroundColor: m.has_actual_cost ? "var(--success, #22c55e)" : "var(--primary, #6366f1)",
           transition: "width 0.3s",
         },
@@ -243,16 +245,25 @@
         ? React.createElement(
             "div",
             { style: { padding: "12px 0 12px 16px", display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12, color: "#999" } },
-            // cost breakdown (estimated vs actual)
+            // cost breakdown: plugin (realistic) vs DB-estimated vs actual
             React.createElement(
               "div",
               { style: { display: "flex", gap: 24, flexWrap: "wrap" } },
               React.createElement("span", null,
-                "Estimated: ", React.createElement("strong", { style: { color: "#b0b0b0" } }, fmtCost(m.estimated_cost))
+                "Realistic: ", React.createElement("strong", { style: { color: hasPluginCost ? "#4ade80" : "#666" } },
+                  hasPluginCost ? fmtCost(m.plugin_cost) : "N/A"
+                )
+              ),
+              React.createElement("span", null,
+                "Hermes DB: ", React.createElement("strong", { style: { color: "#b0b0b0" } }, fmtCost(m.estimated_cost))
               ),
               React.createElement("span", null,
                 "Actual: ", React.createElement("strong", { style: { color: m.has_actual_cost ? "#4ade80" : "#666" } }, m.has_actual_cost ? fmtCost(m.actual_cost) : "N/A (provider doesn't report)")
-              )
+              ),
+              m.pricing_input !== undefined
+                ? React.createElement("span", { style: { color: "#666", fontSize: 10 } },
+                    "Rate: $" + m.pricing_input + "/$" + m.pricing_output + " per 1M tokens")
+                : null
             ),
             // capability badges
             React.createElement(
@@ -286,6 +297,7 @@
             React.createElement("div", { style: { display: "flex", gap: 24, flexWrap: "wrap", color: "#888", fontSize: 11 } },
               React.createElement("span", null, "Input share: ", fmtPct(m.input_pct)),
               React.createElement("span", null, "Output share: ", fmtPct(m.output_pct)),
+              React.createElement("span", null, "Total share: ", fmtPct(m.total_pct)),
               React.createElement("span", null, "Cost share: ", fmtPct(m.cost_pct))
             )
           )
@@ -312,8 +324,9 @@
       React.createElement("div", { style: { flex: 2, minWidth: 0 } }, "Model"),
       React.createElement("div", { style: { flex: 1, textAlign: "right", paddingRight: 8 } }, "Input"),
       React.createElement("div", { style: { flex: 1, textAlign: "right", paddingRight: 8 } }, "Output"),
-      React.createElement("div", { style: { flex: 0.8, textAlign: "right", paddingRight: 8 } }, "Cache"),
-      React.createElement("div", { style: { flex: 0.8, textAlign: "right", paddingRight: 8 } }, "Cost"),
+      React.createElement("div", { style: { flex: 1, textAlign: "right", paddingRight: 8, fontWeight: 600, color: "#ccc" } }, "Total"),
+      React.createElement("div", { style: { flex: 0.6, textAlign: "right", paddingRight: 8 } }, "Cache"),
+      React.createElement("div", { style: { flex: 0.7, textAlign: "right", paddingRight: 8 } }, "Cost"),
       React.createElement("div", { style: { flex: 0.5, textAlign: "right" } }, "Sess"),
       React.createElement("div", { style: { width: 20 } })
     );
@@ -428,7 +441,11 @@
 
     var totals = data.totals;
     var models = data.models;
-    var totalTokens = (totals.total_input || 0) + (totals.total_output || 0);
+    var totalTokens = totals.total_tokens || ((totals.total_input || 0) + (totals.total_output || 0));
+
+    // Use plugin_cost as primary display cost
+    var primaryTotalCost = totals.has_plugin_cost ? (totals.total_plugin_cost || 0) : (totals.total_estimated_cost || 0);
+    var hasPrimaryCost = totals.has_plugin_cost || totals.total_estimated_cost > 0;
 
     return React.createElement(
       "div",
@@ -448,10 +465,17 @@
         { style: { display: "flex", gap: 12, marginBottom: 24, flexWrap: "wrap" } },
         React.createElement(SummaryCard, { label: "Total Tokens", value: fmt(totalTokens) }),
         React.createElement(SummaryCard, {
-          label: "Est. Cost",
-          value: fmtCostShort(totals.total_estimated_cost),
-          sub: totals.has_actual_cost ? null : "estimated from token count",
+          label: "Realistic Cost",
+          value: fmtCostShort(primaryTotalCost),
+          sub: totals.has_plugin_cost ? "from pricing table" : "estimated from token count",
         }),
+        totals.total_estimated_cost > 0 && totals.has_plugin_cost
+          ? React.createElement(SummaryCard, {
+              label: "Hermes DB Cost",
+              value: fmtCostShort(totals.total_estimated_cost),
+              sub: "built-in estimate",
+            })
+          : null,
         totals.has_actual_cost
           ? React.createElement(SummaryCard, { label: "Actual Cost", value: fmtCostShort(totals.total_actual_cost) })
           : null,
@@ -460,7 +484,7 @@
       ),
 
       // cost note
-      totals.total_estimated_cost > 0
+      totals.has_plugin_cost
         ? React.createElement(
             "div",
             {
@@ -472,8 +496,8 @@
               },
             },
             totals.has_actual_cost
-              ? "Showing both estimated (token-count × pricing) and actual (provider-reported) costs."
-              : "Costs are estimated from token counts × published pricing. Actual billing may differ."
+              ? "Showing realistic (pricing-table), Hermes DB, and actual (provider-reported) costs."
+              : "Cost from real-world pricing table. Hermes DB estimate and actual billing may differ."
           )
         : null,
 
@@ -482,20 +506,23 @@
 
       // model rows
       (function () {
-        var totalInput = 0;
-        var totalOutput = 0;
+        var totalTokensAll = 0;
         var totalCostAll = 0;
         models.forEach(function (m) {
-          totalInput += m.input_tokens || 0;
-          totalOutput += m.output_tokens || 0;
-          totalCostAll += m.estimated_cost || 0;
+          totalTokensAll += (m.total_tokens || m.input_tokens || 0) + (m.output_tokens || 0);
+          if (m.has_plugin_cost) {
+            totalCostAll += m.plugin_cost || 0;
+          } else {
+            totalCostAll += m.estimated_cost || 0;
+          }
         });
 
         return models.map(function (m) {
+          var thisTotal = m.total_tokens || ((m.input_tokens || 0) + (m.output_tokens || 0));
+          var thisCost = m.has_plugin_cost ? (m.plugin_cost || 0) : (m.estimated_cost || 0);
           var enriched = Object.assign({}, m, {
-            input_pct: totalInput > 0 ? (m.input_tokens || 0) / totalInput * 100 : 0,
-            output_pct: totalOutput > 0 ? (m.output_tokens || 0) / totalOutput * 100 : 0,
-            cost_pct: totalCostAll > 0 ? (m.estimated_cost || 0) / totalCostAll * 100 : 0,
+            total_pct: totalTokensAll > 0 ? thisTotal / totalTokensAll * 100 : 0,
+            cost_pct: totalCostAll > 0 ? thisCost / totalCostAll * 100 : 0,
           });
           return React.createElement(ModelRow, {
             key: m.model + (m.provider || ""),
