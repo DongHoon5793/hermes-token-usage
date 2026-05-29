@@ -136,10 +136,10 @@
           React.createElement("span", {
             style: {
               fontSize: 11,
+              color: "#888",
               textTransform: "uppercase",
               letterSpacing: "0.08em",
-              color: "var(--text-tertiary, #888)",
-              fontFamily: "var(--font-mondwest, monospace)",
+              fontFamily: "monospace",
             },
           }, "Provider Balances"),
           React.createElement("span", {
@@ -164,7 +164,7 @@
   // ----- summary card -----
   function SummaryCard(props) {
     var sub = props.sub
-      ? React.createElement("span", { style: { fontSize: 11, color: "var(--text-tertiary, #888)", marginLeft: 6 } }, props.sub)
+      ? React.createElement("span", { style: { fontSize: 11, color: "#888", marginLeft: 6 } }, props.sub)
       : null;
     return React.createElement(
       Card,
@@ -175,10 +175,10 @@
         React.createElement("span", {
           style: {
             fontSize: 11,
+            color: "#888",
             textTransform: "uppercase",
             letterSpacing: "0.08em",
-            color: "var(--text-tertiary, #888)",
-            fontFamily: "var(--font-mondwest, monospace)",
+            fontFamily: "monospace",
           },
         }, props.label)
       ),
@@ -186,7 +186,7 @@
         CardContent,
         { style: { padding: "0 16px 12px" } },
         React.createElement("span", {
-          style: { fontSize: 18, fontWeight: 600, color: "var(--foreground, #eee)" },
+          style: { fontSize: 18, fontWeight: 600, color: "#e0e0e0" },
         }, props.value),
         sub
       )
@@ -247,7 +247,7 @@
         style: {
           height: 2,
           width: (m.total_pct || 0) + "%",
-          backgroundColor: m.has_actual_cost ? "var(--success, #22c55e)" : "var(--primary, #6366f1)",
+          backgroundColor: m.has_actual_cost ? "#22c55e" : "#6366f1",
           transition: "width 0.3s",
         },
       }),
@@ -323,10 +323,10 @@
       padding: "8px 0",
       borderBottom: "1px solid rgba(255,255,255,0.1)",
       fontSize: 11,
+      color: "#888",
       textTransform: "uppercase",
-      letterSpacing: "0.06em",
-      color: "var(--text-tertiary, #777)",
-      fontFamily: "var(--font-mondwest, monospace)",
+      letterSpacing: "0.08em",
+      fontFamily: "monospace",
     };
     return React.createElement(
       "div",
@@ -364,7 +364,7 @@
           style: {
             borderRadius: 0,
             fontSize: 12,
-            ...(active ? { backgroundColor: "var(--primary, #6366f1)", color: "#fff" } : {}),
+            ...(active ? { backgroundColor: "#6366f1", color: "#fff" } : {}),
           },
         }, opt.label);
       })
