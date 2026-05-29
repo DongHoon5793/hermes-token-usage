@@ -104,6 +104,53 @@
     );
   }
 
+  // ----- balance card (collapsible) -----
+  function BalanceCard(props) {
+    var collapsedState = hooks.useState(false);
+    var collapsed = collapsedState[0];
+    var setCollapsed = collapsedState[1];
+    var providers = props.providers;
+
+    return React.createElement(
+      Card,
+      { style: { marginBottom: 24, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 0 } },
+      React.createElement(
+        CardHeader,
+        {
+          style: { padding: "10px 16px 6px", cursor: "pointer" },
+          onClick: function () { setCollapsed(!collapsed); }
+        },
+        React.createElement(
+          "div",
+          { style: { display: "flex", alignItems: "center", gap: 8 } },
+          React.createElement("span", {
+            style: {
+              fontSize: 11,
+              textTransform: "uppercase",
+              letterSpacing: "0.08em",
+              color: "var(--text-tertiary, #888)",
+              fontFamily: "var(--font-mondwest, monospace)",
+            },
+          }, "Provider Balances"),
+          React.createElement("span", {
+            style: { fontSize: 10, color: "#666" },
+          }, "(actual, from provider APIs)"),
+          React.createElement("span", { style: { flex: 1 } }),
+          React.createElement("span", {
+            style: { fontSize: 12, color: "#666", marginLeft: "auto" },
+          }, collapsed ? "\u25B8" : "\u25BE")
+        )
+      ),
+      collapsed ? null : React.createElement(
+        CardContent,
+        { style: { padding: 0 } },
+        providers.map(function (b) {
+          return React.createElement(BalanceRow, { key: b.provider, balance: b });
+        })
+      )
+    );
+  }
+
   // ----- summary card -----
   function SummaryCard(props) {
     var sub = props.sub
@@ -390,39 +437,9 @@
       // period selector
       React.createElement(PeriodSelector, { days: days, onChange: setDays }),
 
-      // balance section
+      // balance section (collapsible)
       balance && balance.providers && balance.providers.length > 0
-        ? React.createElement(
-            Card,
-            { style: { marginBottom: 24, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 0 } },
-            React.createElement(
-              CardHeader,
-              { style: { padding: "10px 16px 6px" } },
-              React.createElement(
-                "div",
-                { style: { display: "flex", alignItems: "center", gap: 8 } },
-                React.createElement("span", {
-                  style: {
-                    fontSize: 11,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    color: "var(--text-tertiary, #888)",
-                    fontFamily: "var(--font-mondwest, monospace)",
-                  },
-                }, "Provider Balances"),
-                React.createElement("span", {
-                  style: { fontSize: 10, color: "#666" },
-                }, "(actual, from provider APIs)")
-              )
-            ),
-            React.createElement(
-              CardContent,
-              { style: { padding: 0 } },
-              balance.providers.map(function (b) {
-                return React.createElement(BalanceRow, { key: b.provider, balance: b });
-              })
-            )
-          )
+        ? React.createElement(BalanceCard, { providers: balance.providers })
         : null,
 
       // summary cards
