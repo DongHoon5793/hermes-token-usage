@@ -477,12 +477,6 @@
           label: "Realistic Cost",
           value: fmtCostShort(primaryTotalCost),
         }),
-        totals.total_estimated_cost > 0 && totals.has_plugin_cost
-          ? React.createElement(SummaryCard, {
-              label: "Hermes DB Cost",
-              value: fmtCostShort(totals.total_estimated_cost),
-            })
-          : null,
         totals.has_actual_cost
           ? React.createElement(SummaryCard, { label: "Actual Cost", value: fmtCostShort(totals.total_actual_cost) })
           : null,
@@ -503,8 +497,8 @@
               },
             },
             totals.has_actual_cost
-              ? "Showing realistic (pricing-table), Hermes DB, and actual (provider-reported) costs."
-              : "Cost from real-world pricing table. Hermes DB estimate and actual billing may differ."
+              ? "Showing realistic (pricing-table) and actual (provider-reported) costs."
+              : "Cost from real-world pricing table. Actual billing may differ."
           )
         : null,
 
