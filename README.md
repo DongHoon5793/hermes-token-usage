@@ -1,19 +1,18 @@
 # Hermes Token Usage Dashboard Plugin
 
-A dashboard UI plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent) that adds a **Token Usage** tab showing per-model token consumption analytics.
+A dashboard UI plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent) that adds a **Token Usage** tab showing per-model token consumption analytics with realistic cost estimation.
+
+![Screenshot](screenshot.png)
 
 ## Features
 
-- **Per-model token breakdown** — input, output, cache read, and reasoning tokens
-- **Cost tracking** — estimated cost (token count × published pricing) and actual cost (provider-reported, when available)
+- **Per-model token breakdown** — input, output, total, and cache read tokens
+- **Realistic cost estimation** — pricing table with up-to-date provider rates (DeepSeek, OpenAI, Anthropic, Google, etc.), plus actual provider-reported cost when available
 - **Provider balance checks** — live balance from DeepSeek (`/user/balance`) and OpenRouter (`/api/v1/credits`)
-- **Expandable model rows** — click any model row to see capabilities (tools/vision/reasoning support), tool calls, last used date, and percentage shares
+- **Expandable model rows** — click any model row to see capabilities (tools/vision/reasoning), tool calls, last used date, pricing details, and percentage shares
 - **Period selector** — 7d / 14d / 30d / 90d time windows
+- **Persistent UI state** — collapsed sections remember their state across tab switches
 - **Zero build step** — pure JavaScript using the Hermes dashboard SDK, no bundler needed
-
-## Screenshot
-
-*(Add screenshot after installing)*
 
 ## Installation
 
@@ -34,16 +33,10 @@ Then open your Hermes dashboard → **Token Usage** tab.
 
 - **Frontend**: `dashboard/dist/index.js` — a self-contained React component registered via the Hermes dashboard SDK (`window.__HERMES_PLUGINS__`)
 - **Backend**: `dashboard/plugin_api.py` — FastAPI routes mounted at `/api/plugins/token-usage/` providing:
-  - `GET /models?days=30` — per-model usage from the session database
+  - `GET /models?days=30` — per-model usage with realistic cost calculation
   - `GET /balance` — live balance checks for DeepSeek and OpenRouter
 
-All token/cost data comes from the Hermes session database (`~/.hermes/state.db`), which tracks every conversation's input/output tokens and estimated costs automatically.
-
-## Cost Notes
-
-- **Estimated cost** is calculated by Hermes based on token counts × published model pricing
-- **Actual cost** is provider-reported (some providers include billing info in API response headers). Most providers do NOT report this, so actual cost will show "N/A" for them
-- Balance shown in the Provider Balances card is fetched directly from provider APIs (actual account balance)
+All token data comes from the Hermes session database (`~/.hermes/state.db`), which tracks every conversation's input/output tokens automatically. Cost is computed from a built-in pricing table using real-world per-token rates, not Hermes's internal estimate.
 
 ## Requirements
 
