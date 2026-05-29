@@ -106,10 +106,20 @@
 
   // ----- balance card (collapsible) -----
   function BalanceCard(props) {
-    var collapsedState = hooks.useState(false);
+    var providers = props.providers;
+    var collapsedState = hooks.useState(function () {
+      try { return localStorage.getItem("tu_balance_collapsed") === "1"; }
+      catch (e) { return false; }
+    });
     var collapsed = collapsedState[0];
     var setCollapsed = collapsedState[1];
-    var providers = props.providers;
+
+    function toggleCollapsed() {
+      var next = !collapsed;
+      setCollapsed(next);
+      try { localStorage.setItem("tu_balance_collapsed", next ? "1" : "0"); }
+      catch (e) {}
+    }
 
     return React.createElement(
       Card,
@@ -118,7 +128,7 @@
         CardHeader,
         {
           style: { padding: "10px 16px 6px", cursor: "pointer" },
-          onClick: function () { setCollapsed(!collapsed); }
+          onClick: toggleCollapsed
         },
         React.createElement(
           "div",
