@@ -164,11 +164,22 @@
   // ----- summary card -----
   function SummaryCard(props) {
     return React.createElement(
-      Card,
-      { style: { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 0, minWidth: 130, flex: "1 1 0", minHeight: 70, display: "flex", flexDirection: "column" } },
+      "div",
+      {
+        style: {
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 0,
+          minWidth: 130,
+          flex: "1 1 0",
+          minHeight: 68,
+          display: "flex",
+          flexDirection: "column",
+          backgroundColor: "rgba(255,255,255,0.02)",
+        },
+      },
       React.createElement(
-        CardHeader,
-        { style: { padding: "10px 14px 4px", flexShrink: 0 } },
+        "div",
+        { style: { padding: "8px 14px 2px", flexShrink: 0 } },
         React.createElement("span", {
           style: {
             fontSize: 11,
@@ -183,8 +194,8 @@
         }, props.label)
       ),
       React.createElement(
-        CardContent,
-        { style: { padding: "0 14px 10px", flex: "1 1 auto", display: "flex", alignItems: "center", justifyContent: "flex-end" } },
+        "div",
+        { style: { padding: "0 14px 8px", flex: 1, display: "flex", alignItems: "center", justifyContent: "flex-end" } },
         React.createElement("span", {
           style: { fontSize: 18, fontWeight: 600, color: "#e0e0e0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
         }, props.value)
