@@ -163,15 +163,12 @@
 
   // ----- summary card -----
   function SummaryCard(props) {
-    var sub = props.sub
-      ? React.createElement("span", { style: { fontSize: 11, color: "#888", marginLeft: 6 } }, props.sub)
-      : null;
     return React.createElement(
       Card,
-      { className: "flex-1 min-w-[160px]", style: { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 0 } },
+      { style: { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 0, minWidth: 130, flex: "1 1 0", minHeight: 70 } },
       React.createElement(
         CardHeader,
-        { style: { padding: "12px 16px 6px" } },
+        { style: { padding: "10px 14px 4px" } },
         React.createElement("span", {
           style: {
             fontSize: 11,
@@ -179,16 +176,18 @@
             textTransform: "uppercase",
             letterSpacing: "0.08em",
             fontFamily: "monospace",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           },
         }, props.label)
       ),
       React.createElement(
         CardContent,
-        { style: { padding: "0 16px 12px" } },
+        { style: { padding: "0 14px 10px" } },
         React.createElement("span", {
-          style: { fontSize: 18, fontWeight: 600, color: "#e0e0e0" },
-        }, props.value),
-        sub
+          style: { fontSize: 18, fontWeight: 600, color: "#e0e0e0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block" },
+        }, props.value)
       )
     );
   }
@@ -477,13 +476,11 @@
         React.createElement(SummaryCard, {
           label: "Realistic Cost",
           value: fmtCostShort(primaryTotalCost),
-          sub: totals.has_plugin_cost ? "from pricing table" : "estimated from token count",
         }),
         totals.total_estimated_cost > 0 && totals.has_plugin_cost
           ? React.createElement(SummaryCard, {
               label: "Hermes DB Cost",
               value: fmtCostShort(totals.total_estimated_cost),
-              sub: "built-in estimate",
             })
           : null,
         totals.has_actual_cost
